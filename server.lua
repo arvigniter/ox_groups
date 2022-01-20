@@ -22,8 +22,19 @@ for group, data in pairs(groups) do
 end
 
 local players = {}
+local ids = {}
 
-local function loadGroups(source, dbId)
+local function getGroups(source, dbId)
+    local player = players[source]
+
+    if player then
+        return player
+    end
+
+    if not dbId then
+        error(("received no identifier when loading groups for 'player.%s'"):format(source))
+    end
+
     local data = GetResourceKvpString('groups:'..dbId)
     data = data and msgpack.unpack(data) or {}
     players[source] = data
@@ -40,12 +51,13 @@ local function loadGroups(source, dbId)
 
     return data
 end
-exports('loadGroups', loadGroups)
+exports('getGroups', getGroups)
 
-local function setGroup(source, dbId, group, rank)
+local function setGroup(source, group, rank)
     local player = players[source]
 
     if player then
+        local dbId = ids[source]
         local groupData = groups[group]
 
         if not groupData then
@@ -86,5 +98,6 @@ AddEventHandler('playerDropped', function()
         end
 
         players[source] = nil
+        ids[source] = nil
     end
 end)

@@ -5,13 +5,13 @@ Further logic needs to be implemented in any framework or resource utilising the
 
 ```lua
 -- server
-player.groups = exports.groups:loadGroups(source, dbId)
+player.groups = exports.groups:getGroups(source, dbId)
 ```
 dbId is any sort of unique identifier; this might be a standard rockstar license, CitizenId, or some incrementing value.  
 This works with [cfx-server-data/player-data](https://github.com/citizenfx/cfx-server-data/blob/master/resources/[gameplay]/player-data/server.lua), assuming it is being utilised; although it wouldn't support multicharacter systems.
 ```lua
 local dbId = Player(source).state['cfx.re/playerData@id']
-local groups = exports.groups:loadGroups(source, dbId)
+local groups = exports.groups:getGroups(source, dbId)
 ```
 ```lua
 -- client
@@ -26,5 +26,5 @@ print(ox.label, ox.ranks[playerState.ox])
 
 To adjust a players groups or ranks, you can utilise setGroup. Any rank under 1 will remove the group.
 ```lua
-exports.groups:setGroup(source, dbId, 'police', 2)
+exports.groups:setGroup(source, 'police', 2)
 ```
