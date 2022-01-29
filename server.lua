@@ -36,9 +36,11 @@ local function getGroups(source, dbId)
     end
 
     local data = GetResourceKvpString('groups:'..dbId)
-    data = data and msgpack.unpack(data) or {}
-    players[source] = data
     local playerState = Player(source).state
+
+	data = data and msgpack.unpack(data) or {}
+    players[source] = data
+	ids[source] = dbId
 
     for group, rank in pairs(data) do
         local ace = 'group.'..group
