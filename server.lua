@@ -82,17 +82,18 @@ local function setGroup(source, group, rank)
         if rank < 1 then
             player[group] = nil
             ExecuteCommand(('remove_principal player.%s %s'):format(source, ace))
-            playerState:set(group, nil, true)
+			rank = nil
         else
             player[group] = rank
-            playerState:set(group, rank, true)
 
             if not IsPlayerAceAllowed(source, ace) then
                 ExecuteCommand(('add_principal player.%s %s'):format(source, ace))
             end
         end
 
+		playerState:set(group, rank, true)
         SetResourceKvp('groups:'..dbId, msgpack.pack(player))
+		TriggerEvent('ox_groups:setGroup', source, group, rank)
     else
         error(("attempted to set group on invalid playerid '%s'"):format(source))
     end
