@@ -11,14 +11,22 @@ local groups do
     groups = data()
 end
 
-for group, data in pairs(groups) do
-    GlobalState[('group:%s'):format(group)] = data
-    local fmt = 'group.'..group
+do
+	local groupList = {}
 
-    -- This feels weird, am I just doing something really dumb when checking for ace permissions?
-    if not IsPrincipalAceAllowed(fmt, fmt) then
-        ExecuteCommand(('add_ace %s %s allow'):format(fmt, fmt))
-    end
+	for group, data in pairs(groups) do
+		local fmt = 'group.'..group
+
+		-- This feels weird, am I just doing something really dumb when checking for ace permissions?
+		if not IsPrincipalAceAllowed(fmt, fmt) then
+			ExecuteCommand(('add_ace %s %s allow'):format(fmt, fmt))
+		end
+
+		groupList[group] = #data.ranks
+		GlobalState[('group:%s'):format(group)] = data
+	end
+
+	GlobalState['groups'] = groupList
 end
 
 local players = {}
