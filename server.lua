@@ -10,32 +10,43 @@ local groups do
     groups = data()
 end
 
-do
-	local groupList = {}
-
-	for group, data in pairs(groups) do
-		local fmt = 'group.'..group
-
-		-- This feels weird, am I just doing something really dumb when checking for ace permissions?
-		if not IsPrincipalAceAllowed(fmt, fmt) then
-			ExecuteCommand(('add_ace %s %s allow'):format(fmt, fmt))
-		end
-
-		groupList[group] = #data.ranks
-		GlobalState[('group:%s'):format(group)] = data
-	end
-
-	GlobalState['groups'] = groupList
-end
-
-local players = {}
-local ids = {}
-
 local function provideExport(exportName, func)
 	AddEventHandler(('__cfx_export_ox_groups_%s'):format(exportName), function(setCB)
 		setCB(func)
 	end)
 end
+
+---@param name string
+---@param data table
+--- ```
+--- data = {
+--- 	label = 'Display name',
+--- 	ranks = {
+--- 		'Rank 1 Label', 'Rank 2 Label'
+--- 	}
+--- }
+--- ```
+local function registerGroup(name, data)
+	local groupList = GlobalState.groups or {}
+	local fmt = 'group.'..name
+
+	-- This feels weird, am I just doing something really dumb when checking for ace permissions?
+	if not IsPrincipalAceAllowed(fmt, fmt) then
+		ExecuteCommand(('add_ace %s %s allow'):format(fmt, fmt))
+	end
+
+	groupList[name] = #data.ranks
+	GlobalState[('group:%s'):format(name)] = data
+	GlobalState.groups = groupList
+end
+provideExport('registerGroup', registerGroup)
+
+for group, data in pairs(groups) do
+	registerGroup(group, data)
+end
+
+local players = {}
+local ids = {}
 
 local function getGroups(source, dbId)
     local player = players[source]
@@ -120,7 +131,8 @@ end)
 
 if server then
 	server.groups = {
+		registerGroup = registerGroup,
 		getGroups = getGroups,
-		setGroup = setGroup
+		setGroup = setGroup,
 	}
 end
