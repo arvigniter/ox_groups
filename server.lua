@@ -1,6 +1,5 @@
 local groups do
-    local resource = GetCurrentResourceName()
-    local data = LoadResourceFile(resource, 'groups.lua')
+    local data = LoadResourceFile('ox_groups', 'groups.lua')
     assert(data, ("failed to load %s/groups.lua"):format(resource))
     data, err = load(data, ('@@%s/groups.lua'):format(resource))
 
@@ -32,6 +31,12 @@ end
 local players = {}
 local ids = {}
 
+local function provideExport(exportName, func)
+	AddEventHandler(('__cfx_export_ox_groups_%s'):format(exportName), function(setCB)
+		setCB(func)
+	end)
+end
+
 local function getGroups(source, dbId)
     local player = players[source]
 
@@ -61,7 +66,7 @@ local function getGroups(source, dbId)
 
     return data
 end
-exports('getGroups', getGroups)
+provideExport('getGroups', getGroups)
 
 local function setGroup(source, group, rank)
     local player = players[source]
@@ -98,7 +103,7 @@ local function setGroup(source, group, rank)
         error(("attempted to set group on invalid playerid '%s'"):format(source))
     end
 end
-exports('setGroup', setGroup)
+provideExport('setGroup', setGroup)
 
 AddEventHandler('playerDropped', function()
     local player = players[source]
@@ -112,3 +117,10 @@ AddEventHandler('playerDropped', function()
         ids[source] = nil
     end
 end)
+
+if server then
+	server.groups = {
+		getGroups = getGroups,
+		setGroup = setGroup
+	}
+end
