@@ -1,157 +1,158 @@
-local groups do
-	local data = LoadResourceFile('ox_groups', 'groups.lua')
-	assert(data, ("failed to load %s/groups.lua"):format(resource))
-	data, err = load(data, ('@@%s/groups.lua'):format(resource))
-
-	if err then
-		error(err, 0)
-	end
-
-	groups = data()
-end
-
 local function provideExport(exportName, func)
 	AddEventHandler(('__cfx_export_ox_groups_%s'):format(exportName), function(setCB)
 		setCB(func)
 	end)
 end
 
----@param name string
----@param data table
---- ```
---- data = {
---- 	label = 'Display name',
---- 	ranks = {
---- 		'Rank 1 Label', 'Rank 2 Label'
---- 	}
---- }
---- ```
-local function registerGroup(name, data)
-	local groupList = GlobalState.groups or {}
-	local fmt = 'group.'..name
-
-	-- This feels weird, am I just doing something really dumb when checking for ace permissions?
-	if not IsPrincipalAceAllowed(fmt, fmt) then
-		ExecuteCommand(('add_ace %s %s allow'):format(fmt, fmt))
-	end
-
-	groupList[name] = #data.ranks
-	GlobalState[('group:%s'):format(name)] = data
-	GlobalState.groups = groupList
-end
-provideExport('registerGroup', registerGroup)
-
-for group, data in pairs(groups) do
-	registerGroup(group, data)
-end
+local groups = {
+	---```lua
+	---groups.list[groupName] = {
+	---	label: string,
+	---	ranks: array<string>
+	---}
+	---```
+	list = {},
+}
 
 local players = {}
-local ids = {}
 
-local function getGroups(source, dbId)
-	local player = players[source]
+local groupData = setmetatable({}, {
+	__index = function(self, index)
+		self[index] = {}
+		return self[index]
+	end
+})
 
-	if player then
-		return player
+---@param name string
+--- ```lua
+--- exports.ox_groups:registerGroup('police', {
+--- 	label = 'LSPD',
+--- 	ranks = 'Cadet', 'Officer', 'Sergeant', 'Captain', 'Commander', 'Chief'
+--- })
+--- ```
+function groups.register(name, data)
+	groups.list[name] = data
+	local ace = 'group.'..name
+
+	-- This feels weird, am I just doing something really dumb when checking for ace permissions?
+	if not IsPrincipalAceAllowed(ace, ace) then
+		ExecuteCommand(('add_ace %s %s allow'):format(ace, ace))
 	end
 
-	if not dbId then
-		error(("received no identifier when loading groups for 'player.%s'"):format(source))
+	local groupState = GlobalState.groups or {}
+	groupState[name] = #data.ranks
+	GlobalState[('group:%s'):format(name)] = data
+	GlobalState.groups = groupState
+end
+provideExport('registerGroup', groups.register)
+
+do
+	local group = LoadResourceFile('ox_groups', 'server/data.lua')
+	assert(group, 'failed to load ox_groups/server/data.lua')
+	group, err = load(group, '@@ox_groups/server/data.lua')
+
+	if err then
+		error(err, 0)
 	end
 
-	local data = GetResourceKvpString('groups:'..dbId)
-	local playerState = Player(source).state
+	for name, data in pairs(group()) do
+		groups.register(name, data)
+	end
+end
 
-	data = data and msgpack.unpack(data) or {}
-	players[source] = data
-	ids[source] = dbId
+local Query = {
+	SELECT_GROUPS = 'SELECT name, rank from groups WHERE charid = ?',
+	UPDATE_GROUP = 'INSERT INTO groups (charid, name, rank) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE rank = VALUES(rank)',
+	DELETE_GROUP = 'DELETE FROM groups WHERE charid = ? AND name = ?'
+}
 
-	for group, rank in pairs(data) do
-		local ace = 'group.'..group
-		playerState:set(group, rank, true)
+---@param source number server id to identify the player
+---@param charid number | string unique identifier used to reference the character in the database
+---@return table<string, number> groups
+function groups.load(source, charid)
+	if source then players[source] = charid end
 
-		if not IsPlayerAceAllowed(source, ace) then
-			ExecuteCommand(('add_principal player.%s %s'):format(source, ace))
+	if next(groupData[charid]) then
+		return groupData[charid]
+	end
+
+	local result = MySQL.query.await(Query.SELECT_GROUPS, { charid })
+	for _, group in pairs(result) do
+		groupData[charid][group.name] = group.rank
+
+		if source then
+			local ace = 'group.'..group.name
+			Player(source).state:set(group.name, group.rank, true)
+
+			if not IsPlayerAceAllowed(source, ace) then
+				ExecuteCommand(('add_principal player.%s %s'):format(source, ace))
+			end
 		end
 	end
 
-	return data
+	return groupData[charid]
 end
-provideExport('getGroups', getGroups)
+provideExport('load', groups.load)
 
-local function setGroup(source, group, rank)
-	local player = players[source]
+---@param source number server id to identify the player
+---@param group? string return the player's rank in the given group
+---@return number | table<string, number>
+---Leave group undefined to get a table of all groups and ranks
+function groups.get(source, group)
+	if source then
+		local charid = players[source]
 
-	if player then
-		local dbId = ids[source]
-		local groupData = groups[group]
+		if group then
+			return groupData[charid][group]
+		end
 
-		if not groupData then
+		return groupData[charid]
+	end
+
+	return groups.list
+end
+provideExport('get', groups.get)
+
+---@param source number server id to identify the player
+---@param group string name of the group to adjust
+---@param rank number
+---Any rank under 1 will remove the group from the player.
+function groups.set(source, group, rank)
+	if source then
+		local charid = players[source]
+		local data = groups.list[group]
+
+		if not data then
 			error(("attempted to set invalid group '%s' on 'player.%s'"):format(group, source))
-		elseif not groupData.ranks[rank] and rank > 0 then
+		elseif not data.ranks[rank] and rank > 0 then
 			error(("attempted to set invalid rank '%s' for group '%s' on 'player.%s'"):format(rank, group, source))
 		end
 
-		local playerState = Player(source).state
 		local ace = 'group.'..group
 
 		if rank < 1 then
-			player[group] = nil
-			ExecuteCommand(('remove_principal player.%s %s'):format(source, ace))
+			if not groupData[charid][group] then return end
 			rank = nil
+			groupData[charid][group] = nil
+			MySQL.prepare(Query.DELETE_GROUP, { charid, group })
+			ExecuteCommand(('remove_principal player.%s %s'):format(source, ace))
 		else
-			player[group] = rank
+			groupData[charid][group] = rank
+			MySQL.prepare(Query.UPDATE_GROUP, { charid, group, rank })
 
 			if not IsPlayerAceAllowed(source, ace) then
 				ExecuteCommand(('add_principal player.%s %s'):format(source, ace))
 			end
 		end
 
-		playerState:set(group, rank, true)
-		SetResourceKvp('groups:'..dbId, msgpack.pack(player))
+		Player(source).state:set(group, rank, true)
 		TriggerEvent('ox_groups:setGroup', source, group, rank)
-	else
-		error(("attempted to set group on invalid playerid '%s'"):format(source))
+
+		groupData[charid][group] = rank
 	end
 end
-provideExport('setGroup', setGroup)
-
-local function userGroups(dbId)
-	local data = GetResourceKvpString('groups:'..dbId)
-	data = data and msgpack.unpack(data) or {}
-	local labels = {}
-	local size = 0
-
-	for group in pairs(data) do
-		group = groups[group]
-		if group then
-			size += 1
-			labels[size] = group.label
-		end
-	end
-
-	return labels
-end
-provideExport('userGroups', userGroups)
-
-AddEventHandler('playerDropped', function()
-	local player = players[source]
-
-	if player then
-		for group in pairs(player) do
-			ExecuteCommand(('remove_principal player.%s group.%s'):format(source, group))
-		end
-
-		players[source] = nil
-		ids[source] = nil
-	end
-end)
+provideExport('set', groups.set)
 
 if server then
-	server.groups = {
-		registerGroup = registerGroup,
-		getGroups = getGroups,
-		setGroup = setGroup,
-        userGroups = userGroups,
-	}
+	server.groups = groups
 end
