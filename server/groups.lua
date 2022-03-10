@@ -61,9 +61,9 @@ do
 end
 
 local Query = {
-	SELECT_GROUPS = 'SELECT name, rank from groups WHERE charid = ?',
-	UPDATE_GROUP = 'INSERT INTO groups (charid, name, rank) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE rank = VALUES(rank)',
-	DELETE_GROUP = 'DELETE FROM groups WHERE charid = ? AND name = ?'
+	SELECT_GROUPS = 'SELECT name, rank FROM user_groups WHERE charid = ?',
+	UPDATE_GROUP = 'INSERT INTO user_groups (charid, name, rank) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE rank = VALUES(rank)',
+	DELETE_GROUP = 'DELETE FROM user_groups WHERE charid = ? AND name = ?'
 }
 
 ---@param source number server id to identify the player
