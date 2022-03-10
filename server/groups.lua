@@ -24,13 +24,14 @@ local groupData = setmetatable({}, {
 })
 
 ---@param name string
+---@param data table
 --- ```lua
---- exports.ox_groups:registerGroup('police', {
+--- exports.ox_groups:new('police', {
 --- 	label = 'LSPD',
 --- 	ranks = 'Cadet', 'Officer', 'Sergeant', 'Captain', 'Commander', 'Chief'
 --- })
 --- ```
-function groups.register(name, data)
+function groups.new(name, data)
 	groups.list[name] = data
 	local ace = 'group.'..name
 
@@ -44,7 +45,7 @@ function groups.register(name, data)
 	GlobalState[('group:%s'):format(name)] = data
 	GlobalState.groups = groupState
 end
-provideExport('registerGroup', groups.register)
+provideExport('new', groups.new)
 
 do
 	local group = LoadResourceFile('ox_groups', 'server/data.lua')
@@ -56,7 +57,7 @@ do
 	end
 
 	for name, data in pairs(group()) do
-		groups.register(name, data)
+		groups.new(name, data)
 	end
 end
 

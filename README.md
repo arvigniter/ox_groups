@@ -38,13 +38,24 @@ CREATE TABLE `user_groups` (
 
 
 ## Usage
+Define a new group and its ranks at runtime.
+```lua
+---@param name string
+---@param data table
+exports.ox_groups:new(name, data)
+
+exports.ox_groups:new('police', {
+	label = 'LSPD',
+	ranks = 'Cadet', 'Officer', 'Sergeant', 'Captain', 'Commander', 'Chief'
+})
+```
+
 Once character data has been loaded in your framework you should immediately load the group data as well.
 ```lua
 ---@param source number server id to identify the player
 ---@param charid number | string unique identifier used to reference the character in the database
 ---@return table<string, number> groups
-
-local groups = exports.ox_groups:load(source, charid)
+exports.ox_groups:load(source, charid)
 ```
 
 Once group data has been loaded for a player, there are a few different ways to get the data in the future.
@@ -53,12 +64,8 @@ Once group data has been loaded for a player, there are a few different ways to 
 ---@param group? string return the player's rank in the given group
 ---@return number | table<string, number>
 ---Leave group undefined to get a table of all groups and ranks
-
 local groups = exports.ox_groups:get(source)
--- {police = 1}
-
 local police = exports.ox_groups:get(source, 'police')
--- 1
 ```
 
 Groups can be added or modified by using the set function.
