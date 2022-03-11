@@ -154,6 +154,6 @@ function groups.set(source, group, rank)
 end
 provideExport('set', groups.set)
 
-if server then
+if GetCurrentResourceName() == 'ox_core' then
 	server.groups = groups
 end
