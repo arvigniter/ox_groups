@@ -14,5 +14,6 @@ description  'Standalone group management'
 --[[ Manifest ]]--
 server_scripts {
 	'@oxmysql/lib/MySQL.lua',
+	'@ox_lib/init.lua',
     'server/groups.lua'
 }

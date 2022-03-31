@@ -32,16 +32,23 @@ local groupData = setmetatable({}, {
 --- })
 --- ```
 function groups.new(name, data)
-	groups.list[name] = data
-	local ace = 'group.'..name
+	local groupState = GlobalState.groups or {}
+	local ranks = #data.ranks
+	local parent = ('group.%s'):format(name)
 
-	-- This feels weird, am I just doing something really dumb when checking for ace permissions?
-	if not IsPrincipalAceAllowed(ace, ace) then
-		ExecuteCommand(('add_ace %s %s allow'):format(ace, ace))
+	if not IsPrincipalAceAllowed(parent, parent) then
+		lib.addAce(parent, parent)
+
+		for i = 1, ranks do
+			local child = ('group.%s:%s'):format(name, i)
+			lib.addAce(child, child)
+			lib.addPrincipal(child, parent)
+			parent = child
+		end
 	end
 
-	local groupState = GlobalState.groups or {}
-	groupState[name] = #data.ranks
+	groups.list[name] = data
+	groupState[name] = ranks
 	GlobalState[('group:%s'):format(name)] = data
 	GlobalState.groups = groupState
 end
@@ -71,24 +78,34 @@ local Query = {
 ---@param charid number | string unique identifier used to reference the character in the database
 ---@return table<string, number> groups
 function groups.load(source, charid)
-	if source then players[source] = charid end
+	if source then
+		local currentId = players[source]
+
+		if currentId ~= charid then
+			if currentId then
+				print(currentId, currentId and groupData[currentId] and next(groupData[currentId]))
+				if next(groupData[currentId]) then
+					for name, rank in pairs(groupData[currentId]) do
+						print('remove', rank, rank, 'from', currentId)
+						lib.removePrincipal(source, ('group.%s:%s'):format(name, rank))
+					end
+				end
+			end
+
+			players[source] = charid
+		end
+	end
 
 	if next(groupData[charid]) then
+		for name, rank in pairs(groupData[charid]) do
+			groups.set(source, name, rank)
+		end
+
 		return groupData[charid]
 	end
 
-	local result = MySQL.query.await(Query.SELECT_GROUPS, { charid })
-	for _, group in pairs(result) do
+	for _, group in pairs(MySQL.query.await(Query.SELECT_GROUPS, { charid })) do
 		groupData[charid][group.name] = group.rank
-
-		if source then
-			local ace = 'group.'..group.name
-			Player(source).state:set(group.name, group.rank, true)
-
-			if not IsPlayerAceAllowed(source, ace) then
-				ExecuteCommand(('add_principal player.%s %s'):format(source, ace))
-			end
-		end
 	end
 
 	return groupData[charid]
@@ -129,21 +146,19 @@ function groups.set(source, group, rank)
 			error(("attempted to set invalid rank '%s' for group '%s' on 'player.%s'"):format(rank, group, source))
 		end
 
-		local ace = 'group.'..group
+		local currentRank = groupData[charid][group]
+
+		if currentRank then
+			lib.removePrincipal(source, ('group.%s:%s'):format(group, currentRank))
+		end
 
 		if rank < 1 then
 			if not groupData[charid][group] then return end
 			rank = nil
-			groupData[charid][group] = nil
 			MySQL.prepare(Query.DELETE_GROUP, { charid, group })
-			ExecuteCommand(('remove_principal player.%s %s'):format(source, ace))
 		else
-			groupData[charid][group] = rank
 			MySQL.prepare(Query.UPDATE_GROUP, { charid, group, rank })
-
-			if not IsPlayerAceAllowed(source, ace) then
-				ExecuteCommand(('add_principal player.%s %s'):format(source, ace))
-			end
+			lib.addPrincipal(source, ('group.%s:%s'):format(group, rank))
 		end
 
 		Player(source).state:set(group, rank, true)
